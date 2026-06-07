@@ -1,0 +1,46 @@
+when:
+  - event: push
+    branch: main
+  - event: cron
+  - event: manual
+
+variables:
+  - &image ghcr.io/dein-user/certbot-hetzner-cloud
+
+steps:
+  resolve-certbot-tag:
+    image: alpine:3.20
+    environment:
+      GHCR_IMAGE: *image
+    commands:
+      - apk add --no-cache curl jq docker-cli
+      - chmod +x scripts/resolve-certbot-tag.sh
+      - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+      - scripts/resolve-certbot-tag.sh
+      - cat certbot-tag.env
+    secrets:
+      - ghcr_username
+      - ghcr_token
+
+  build-and-push:
+    image: woodpeckerci/plugin-docker-buildx
+    when:
+      evaluate: 'CI_STEP_PREV_EXIT_CODE == 0'
+    settings:
+      repo: *image
+      registry: ghcr.io
+      username:
+        from_secret: ghcr_username
+      password:
+        from_secret: ghcr_token
+      platforms:
+        - linux/amd64
+        - linux/arm64
+      build_args_from_env:
+        - CERTBOT_TAG
+      tags:
+        - ${CERTBOT_TAG}
+        - latest
+    environment:
+      CERTBOT_TAG:
+        from_secret: certbot_tag_placeholder
