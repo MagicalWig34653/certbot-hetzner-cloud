@@ -12,6 +12,10 @@ steps:
     image: alpine:3.20
     environment:
       GHCR_IMAGE: *image
+      GHCR_USERNAME:
+        from_secret: ghcr_username
+      GHCR_TOKEN:
+        from_secret: ghcr_token
     commands:
       - apk add --no-cache curl jq docker-cli
       - chmod +x scripts/resolve-certbot-tag.sh
