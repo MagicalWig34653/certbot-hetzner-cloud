@@ -2,7 +2,7 @@
 set -eu
 
 DOCKERHUB_REPO="${DOCKERHUB_REPO:-certbot/certbot}"
-GHCR_IMAGE="${GHCR_IMAGE:?GHCR_IMAGE is required, e.g. ghcr.io/owner/certbot-hetzner-cloud}"
+GHCR_IMAGE="${GHCR_IMAGE:?GHCR_IMAGE is required}"
 
 WORKDIR="$(mktemp -d)"
 TAGS_FILE="$WORKDIR/tags.txt"
@@ -44,11 +44,16 @@ IMAGE_WITH_TAG="${GHCR_IMAGE}:${CERTBOT_TAG}"
 
 if docker manifest inspect "$IMAGE_WITH_TAG" >/dev/null 2>&1; then
   echo "Image already exists in GHCR: $IMAGE_WITH_TAG"
-  echo "CERTBOT_TAG=$CERTBOT_TAG" > certbot-tag.env
-  echo "IMAGE_EXISTS=true" >> certbot-tag.env
+  {
+    echo "CERTBOT_TAG=$CERTBOT_TAG"
+    echo "IMAGE_EXISTS=true"
+  } > certbot-tag.env
   exit 0
 fi
 
 echo "Image does not exist yet in GHCR: $IMAGE_WITH_TAG"
-echo "CERTBOT_TAG=$CERTBOT_TAG" > certbot-tag.env
-echo "IMAGE_EXISTS=false" >> certbot-tag.env
+
+{
+  echo "CERTBOT_TAG=$CERTBOT_TAG"
+  echo "IMAGE_EXISTS=false"
+} > certbot-tag.env
