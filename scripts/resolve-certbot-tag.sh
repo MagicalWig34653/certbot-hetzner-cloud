@@ -3,6 +3,8 @@ set -eu
 
 DOCKERHUB_REPO="${DOCKERHUB_REPO:-certbot/certbot}"
 GHCR_IMAGE="${GHCR_IMAGE:?GHCR_IMAGE is required}"
+GHCR_USERNAME="${GHCR_USERNAME:?GHCR_USERNAME is required}"
+GHCR_TOKEN="${GHCR_TOKEN:?GHCR_TOKEN is required}"
 
 WORKDIR="$(mktemp -d)"
 TAGS_FILE="$WORKDIR/tags.txt"
@@ -42,12 +44,23 @@ echo "Resolved latest stable Certbot tag: $CERTBOT_TAG"
 
 IMAGE_WITH_TAG="${GHCR_IMAGE}:${CERTBOT_TAG}"
 
-if docker manifest inspect "$IMAGE_WITH_TAG" >/dev/null 2>&1; then
+if skopeo inspect \
+  --creds "${GHCR_USERNAME}:${GHCR_TOKEN}" \
+  "docker://${IMAGE_WITH_TAG}" >/dev/null 2>&1; then
+
   echo "Image already exists in GHCR: $IMAGE_WITH_TAG"
+
   {
     echo "CERTBOT_TAG=$CERTBOT_TAG"
     echo "IMAGE_EXISTS=true"
   } > certbot-tag.env
+
+  # Wichtig: leere .tags verhindert nicht in allen Plugins den Build.
+  # Daher besser Step über when/exit-Mechanismus lösen, siehe Hinweis unten.
+  echo "$CERTBOT_TAG" > .tags
+  echo "latest" >> .tags
+  echo "CERTBOT_TAG=$CERTBOT_TAG" > .build_args
+
   exit 0
 fi
 
@@ -57,3 +70,10 @@ echo "Image does not exist yet in GHCR: $IMAGE_WITH_TAG"
   echo "CERTBOT_TAG=$CERTBOT_TAG"
   echo "IMAGE_EXISTS=false"
 } > certbot-tag.env
+
+{
+  echo "$CERTBOT_TAG"
+  echo "latest"
+} > .tags
+
+echo "CERTBOT_TAG=$CERTBOT_TAG" > .build_args
