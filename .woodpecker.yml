@@ -5,11 +5,11 @@ when:
   - event: manual
 
 variables:
-  - &image ghcr.io/dein-user/certbot-hetzner-cloud
+  - &image ghcr.io/magicalwig34653/certbot-hetzner-cloud
 
 steps:
   resolve-certbot-tag:
-    image: alpine:3.20
+    image: alpine:3.23
     environment:
       GHCR_IMAGE: *image
       GHCR_USERNAME:
