@@ -4,47 +4,63 @@ when:
   - event: cron
   - event: manual
 
-variables:
-  - &image ghcr.io/magicalwig34653/certbot-hetzner-cloud
-
 steps:
   resolve-certbot-tag:
-    image: alpine:3.23
+    image: docker:29-cli
     environment:
-      GHCR_IMAGE: *image
+      GHCR_IMAGE: ghcr.io/magicalwig34653/certbot-hetzner-cloud
+      DOCKERHUB_REPO: certbot/certbot
       GHCR_USERNAME:
         from_secret: ghcr_username
       GHCR_TOKEN:
         from_secret: ghcr_token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     commands:
-      - apk add --no-cache curl jq docker-cli
-      - chmod +x scripts/resolve-certbot-tag.sh
+      - apk add --no-cache curl jq coreutils
+      - test -n "$GHCR_USERNAME" || { echo "GHCR_USERNAME is empty"; exit 1; }
+      - test -n "$GHCR_TOKEN" || { echo "GHCR_TOKEN is empty"; exit 1; }
       - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+      - chmod +x scripts/resolve-certbot-tag.sh
       - scripts/resolve-certbot-tag.sh
       - cat certbot-tag.env
-    secrets:
-      - ghcr_username
-      - ghcr_token
 
   build-and-push:
-    image: woodpeckerci/plugin-docker-buildx
-    when:
-      evaluate: 'CI_STEP_PREV_EXIT_CODE == 0'
-    settings:
-      repo: *image
-      registry: ghcr.io
-      username:
-        from_secret: ghcr_username
-      password:
-        from_secret: ghcr_token
-      platforms:
-        - linux/amd64
-        - linux/arm64
-      build_args_from_env:
-        - CERTBOT_TAG
-      tags:
-        - ${CERTBOT_TAG}
-        - latest
+    image: docker:29-cli
     environment:
-      CERTBOT_TAG:
-        from_secret: certbot_tag_placeholder
+      GHCR_IMAGE: ghcr.io/magicalwig34653/certbot-hetzner-cloud
+      DOCKER_BUILDKIT: "1"
+      GHCR_USERNAME:
+        from_secret: ghcr_username
+      GHCR_TOKEN:
+        from_secret: ghcr_token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      - apk add --no-cache docker-cli-buildx
+      - test -f certbot-tag.env || { echo "certbot-tag.env not found"; exit 1; }
+      - . ./certbot-tag.env
+      - echo "CERTBOT_TAG=$CERTBOT_TAG"
+      - echo "IMAGE_EXISTS=$IMAGE_EXISTS"
+      - |
+        set -eu
+
+        if [ "$IMAGE_EXISTS" = "true" ]; then
+          echo "Image already exists, skipping build: ${GHCR_IMAGE}:${CERTBOT_TAG}"
+          exit 0
+        fi
+
+        test -n "$GHCR_USERNAME" || { echo "GHCR_USERNAME is empty"; exit 1; }
+        test -n "$GHCR_TOKEN" || { echo "GHCR_TOKEN is empty"; exit 1; }
+
+        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+        docker buildx create --use --name certbot-builder || docker buildx use certbot-builder
+
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --build-arg CERTBOT_TAG="$CERTBOT_TAG" \
+          --tag "${GHCR_IMAGE}:${CERTBOT_TAG}" \
+          --tag "${GHCR_IMAGE}:latest" \
+          --push \
+          .
