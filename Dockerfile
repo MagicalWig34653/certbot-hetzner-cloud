@@ -1,4 +1,4 @@
-ARG CERTBOT_TAG
+ARG CERTBOT_TAG=latest
 
 FROM certbot/certbot:${CERTBOT_TAG}
 
